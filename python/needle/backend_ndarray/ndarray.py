@@ -239,10 +239,14 @@ class NDArray:
         Returns:
             NDArray : reshaped array; this will point to the same memory as the original NDArray.
         """
-
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        # self._shape = new_shape
+        stride = prod(new_shape) * self._strides[-1]
+        new_strides = []
+        for shape in new_shape:
+            new_strides.append(stride // shape)
+            stride = new_strides[-1]
+        # self._strides = tuple(new_strides)
+        return NDArray.make(new_shape, strides=tuple(new_strides), device=self._device, handle=self._handle, offset=self._offset)
 
     def permute(self, new_axes):
         """
@@ -262,10 +266,14 @@ class NDArray:
             to the same memory as the original NDArray (i.e., just shape and
             strides changed).
         """
-
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        new_strides = []
+        new_shape = []
+        for axis in new_axes:
+            new_strides.append(self._strides[axis])
+            new_shape.append(self._shape[axis])
+        # self._strides = tuple(new_strides)
+        # self._shape = tuple(new_shape)
+        return NDArray.make(tuple(new_shape), strides=tuple(new_strides), device=self._device, handle=self._handle, offset=self._offset)
 
     def broadcast_to(self, new_shape):
         """
@@ -283,10 +291,17 @@ class NDArray:
             NDArray: the new NDArray object with the new broadcast shape; should
             point to the same memory as the original array.
         """
-
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        new_strides = []
+        for axis, shape in enumerate(new_shape):
+            if shape == self._shape[axis]:
+                new_strides.append(self._strides[axis])
+            else:
+                assert self._shape[axis] == 1
+                new_strides.append(0)
+                
+        self._shape = new_shape
+        self._strides = tuple(new_strides)
+        return NDArray.make(tuple(new_shape), strides=tuple(new_strides), device=self._device, handle=self._handle, offset=self._offset)
 
     ### Get and set elements
 
@@ -335,7 +350,6 @@ class NDArray:
             manipulate the shape/strides/offset of the new array, referencing
             the same array as the original one.
         """
-
         # handle singleton as tuple, everything as slices
         if not isinstance(idxs, tuple):
             idxs = (idxs,)
@@ -346,17 +360,24 @@ class NDArray:
             ]
         )
         assert len(idxs) == self.ndim, "Need indexes equal to number of dimensions"
-
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        new_shape = []
+        new_strides = []
+        new_offset = 0
+        for axis, idx in enumerate(idxs):
+            new_shape.append((idx.stop - idx.start - 1) // idx.step + 1)
+            new_strides.append(self._strides[axis] * idx.step)
+            new_offset += idx.start * self._strides[axis]
+        # self._shape = tuple(new_shape)
+        # self._strides = tuple(new_strides)
+        # self._offset = new_offset
+        return NDArray.make(tuple(new_shape), strides=tuple(new_strides), device=self._device, handle=self._handle, offset=new_offset)
 
     def __setitem__(self, idxs, other):
         """Set the values of a view into an array, using the same semantics
         as __getitem__()."""
         view = self.__getitem__(idxs)
         if isinstance(other, NDArray):
-            assert prod(view.shape) == prod(other.shape)
+            assert prod(view.shape) == prod(other.shape), f"{view.shape} {other.shape}"
             self.device.ewise_setitem(
                 other.compact()._handle,
                 view._handle,
@@ -549,7 +570,7 @@ def array(a, dtype="float32", device=None):
 
 def empty(shape, dtype="float32", device=None):
     device = device if device is not None else default_device()
-    return devie.empty(shape, dtype)
+    return device.empty(shape, dtype)
 
 
 def full(shape, fill_value, dtype="float32", device=None):
